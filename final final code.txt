@@ -1,0 +1,212 @@
+  /*************************************************************
+  Download latest Blynk library here:
+    https://github.com/blynkkk/blynk-library/releases/latest
+
+  Blynk is a platform with iOS and Android apps to control
+  Arduino, Raspberry Pi and the likes over the Internet.
+  You can easily build graphic interfaces for all your
+  projects by simply dragging and dropping widgets.
+
+    Downloads, docs, tutorials: http://www.blynk.cc
+    Sketch generator:           http://examples.blynk.cc
+    Blynk community:            http://community.blynk.cc
+    Follow us:                  http://www.fb.com/blynkapp
+                                http://twitter.com/blynk_app
+
+  Blynk library is licensed under MIT license
+  This example code is in public domain.
+
+ *************************************************************
+  WARNING!
+    It's very tricky to get it working. Please read this article:
+    http://help.blynk.cc/hardware-and-libraries/arduino/esp8266-with-at-firmware
+
+  You can use this sketch as a debug tool that prints all incoming values
+  sent by a widget connected to a Virtual Pin 1 in the Blynk App.
+
+  App project setup:
+    Slider widget (0...100) on V1
+ *************************************************************/
+
+/* Comment this out to disable prints and save space */
+#define BLYNK_PRINT Serial
+
+
+#include <ESP8266_Lib.h>
+#include <BlynkSimpleShieldEsp8266.h>
+
+// You should get Auth Token in the Blynk App.
+// Go to the Project Settings (nut icon).
+char auth[] = "129aa3649ec043a69274ef8ff228168f";
+
+// Your WiFi credentials.
+// Set password to "" for open networks.
+char ssid[] = "iPhone";
+char pass[] = "nikhil123";
+
+// Hardware Serial on Mega, Leonardo, Micro...
+//#define EspSerial Serial1
+
+// or Software Serial on Uno, Nano...
+#include <SoftwareSerial.h>
+SoftwareSerial EspSerial(2, 3); // RX, TX
+
+// Your ESP8266 baud rate:
+#define ESP8266_BAUD 38400
+
+ESP8266 wifi(&EspSerial);
+
+// This function will be called every time Slider Widget
+// in Blynk app writes values to the Virtual Pin 1
+
+
+
+
+byte statusLed    = 13;
+
+byte sensorInterrupt = 0;  // 0 = digital pin 2
+byte sensorPin       = 0;
+
+// The hall-effect flow sensor outputs approximately 4.5 pulses per second per
+// litre/minute of flow.
+float calibrationFactor = 4.5;
+
+volatile byte pulseCount;  
+
+float flowRate;
+unsigned int flowMilliLitres;
+ float totalMilliLitres;
+ float outputlitres;
+ float v1;
+
+unsigned long oldTime;
+
+BlynkTimer timer;
+void myTimerEvent()
+{
+v1 =flowRate;
+unsigned int v2 =flowMilliLitres;
+float v3 =outputlitres;
+Blynk.virtualWrite(V5, v1);
+Blynk.virtualWrite(V6, v2);
+Blynk.virtualWrite(V7, v3);
+  
+}
+
+/*
+Interrupt Service Routine
+ */
+void pulseCounter()
+{
+  // Increment the pulse counter
+  pulseCount++;
+}
+
+
+
+//BLYNK_WRITE(V1)
+//{
+//  int pinValue = param.asInt(); // assigning incoming value from pin V1 to a variable
+  // You can also use:
+  // String i = param.asStr();
+  // double d = param.asDouble();
+ // Serial.print("V1 Slider value is: ");
+ // Serial.println(pinValue);
+//}
+
+void setup()
+{
+  // Debug console
+  Serial.begin(9600);
+
+EspSerial.begin(ESP8266_BAUD);
+  delay(10);
+
+
+// Initialize a serial connection for reporting values to the host
+ // Serial.begin(38400);
+   
+  // Set up the status LED line as an output
+  pinMode(statusLed, OUTPUT);
+  digitalWrite(statusLed, HIGH);  // We have an active-low LED attached
+  
+  pinMode(sensorPin, INPUT);
+  digitalWrite(sensorPin, HIGH);
+
+  pulseCount        = 0;
+  flowRate          = 0.0;
+  flowMilliLitres   = 0;
+  totalMilliLitres  = 0.0;
+  oldTime           = 0;
+  outputlitres      =0.0;
+v1=0.0;
+  // The Hall-effect sensor is connected to pin 2 which uses interrupt 0.
+  // Configured to trigger on a FALLING state change (transition from HIGH
+  // state to LOW state)
+  attachInterrupt(sensorInterrupt, pulseCounter, FALLING);
+  Serial.println("CLEARDATA");
+  Serial.println("LABEL,Flow rate (L/min),Current Liquid Flowing (mL/sec),Output Flow (L)");
+  
+  
+  timer.setInterval(1000L, myTimerEvent);
+
+
+/**
+ * Main program loop
+ */
+
+ 
+  // Set ESP8266 baud rate
+ 
+
+  Blynk.begin(auth, wifi, ssid, pass);
+  // You can also specify server:
+  //Blynk.begin(auth, wifi, ssid, pass, "blynk-cloud.com", 80);
+  //Blynk.begin(auth, wifi, ssid, pass, IPAddress(192,168,1,100), 8080);
+}
+
+void loop()
+{
+
+
+   if((millis() - oldTime) > 1000)    // Only process counters once per second
+  { 
+    // Disable the interrupt while calculating flow rate and sending the value to
+    // the host
+    detachInterrupt(sensorInterrupt);
+        
+   
+    flowRate = ((1000.0 / (millis() - oldTime)) * pulseCount) / calibrationFactor;
+    
+   
+    oldTime = millis();
+    
+   
+    flowMilliLitres = (flowRate / 60) * 1000;
+    
+    // Add the millilitres passed in this second to the cumulative total
+    totalMilliLitres += flowMilliLitres;
+   
+    outputlitres=totalMilliLitres/1000;
+      
+    
+
+  
+// Reset the pulse counter so we can start incrementing again
+    pulseCount = 0;
+    
+    // Enable the interrupt again now that we've finished sending output
+    attachInterrupt(sensorInterrupt, pulseCounter, FALLING);
+Serial.print("DATA,"); 
+ Serial.print(flowRate);
+ Serial.print(",");
+  
+    Serial.print(flowMilliLitres);
+Serial.print(",");
+    Serial.println(outputlitres);
+    
+   
+  }
+  Blynk.run();
+  timer.run(); // running timer every second
+}
